@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080a12">
+  <meta name="description" content="A private developer utility for inspecting signed media URLs, cookie timestamps, and manifest expiry data.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="stylesheet" href="/static/styles.css">
+  <title>ChronoGlass — Token Inspector</title>
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <div class="grid-overlay"></div>
+
+  <div class="shell" id="appShell" aria-hidden="true">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="ChronoGlass home">
+        <span class="brand-mark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3.5 26 8v7.2c0 6.2-4.2 10.9-10 13.3C10.2 26.1 6 21.4 6 15.2V8l10-4.5Z"/><path d="M11.5 16.1 14.6 19l6.2-6.4"/></svg></span>
+        <span class="brand-copy"><strong>ChronoGlass</strong><small>DEVELOPER UTILITIES</small></span>
+      </a>
+      <div class="top-actions">
+        <span class="session-pill"><i></i><span id="sessionLabel">PRIVATE SESSION</span></span>
+        <button class="icon-button install-button" id="installButton" type="button" aria-label="Install app" title="Install app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v4h14v-4"/></svg><span>Install</span></button>
+        <button class="icon-button" id="settingsButton" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 13.5 1.1.8-1.1 1.9-1.3-.5a7.6 7.6 0 0 1-1.5.9l-.2 1.4h-2.2l-.4-1.4a7.5 7.5 0 0 1-1.7 0l-.5 1.4H9.4l-.2-1.4a7.6 7.6 0 0 1-1.5-.9l-1.3.5-1.1-1.9 1.1-.8a7.4 7.4 0 0 1-.2-1.7l-1.2-.7.7-2.1 1.4.1a7.6 7.6 0 0 1 1.2-1.3l-.2-1.4 2.1-.7.8 1.2a7.6 7.6 0 0 1 1.7-.2l.7-1.2 2.1.7-.1 1.4a7.6 7.6 0 0 1 1.3 1.2l1.4-.2.7 2.1-1.2.8a7.6 7.6 0 0 1 .3 1.7Z"/></svg></button>
+        <button class="icon-button logout-button" id="logoutButton" type="button" aria-label="Lock session" title="Lock session"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10V7a4 4 0 0 1 8 0v3m-9 0h10a2 2 0 0 1 2 2v7H5v-7a2 2 0 0 1 2-2Z"/><path d="M12 14v2"/></svg></button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="eyebrow-line"></span> PRIVATE URL &amp; COOKIE ANALYSIS</div>
+          <h1>Time, decoded.<br><span>Clarity for every token.</span></h1>
+          <p>Inspect signed URLs, cookie strings, and streaming manifests. Find expiry and issue timestamps without losing the context around them.</p>
+        </div>
+        <div class="hero-widget glass-panel">
+          <div class="widget-head"><span class="tiny-label">LOCAL CLOCK</span><span class="live-indicator"><i></i> LIVE</span></div>
+          <div class="clock-time" id="clockTime">--:--:--</div>
+          <div class="clock-meta"><span id="clockDate">Loading date</span><span class="clock-zone" id="clockZone">Asia/Kolkata</span></div>
+          <div class="widget-divider"></div>
+          <div class="widget-foot"><span class="pulse-icon">↗</span><span>Timestamp intelligence <b>ready</b></span></div>
+        </div>
+      </section>
+
+      <section class="workspace-grid">
+        <div class="glass-panel input-panel">
+          <div class="panel-heading">
+            <div><div class="eyebrow small-eyebrow">01 / INPUT</div><h2>Drop in your data</h2></div>
+            <div class="input-actions"><button class="text-button" id="pasteButton" type="button">Paste</button><span class="action-divider"></span><button class="text-button" id="clearButton" type="button">Clear</button></div>
+          </div>
+          <p class="panel-description">Paste one or more URLs, cookie values, or manifest text. Common <code>exp</code>, <code>Expires</code>, and <code>st</code> fields are detected automatically.</p>
+          <label class="sr-only" for="inputData">URL, cookie, or manifest source</label>
+          <div class="editor-wrap"><div class="editor-gutter"><span>01</span><span>02</span><span>03</span><span class="gutter-dots">···</span></div><textarea id="inputData" spellcheck="false" placeholder="Paste a signed URL, cookie string, or manifest source…&#10;&#10;Multiple URLs are supported. Use ⌘ / Ctrl + Enter to inspect."></textarea><div class="editor-bottom"><span class="secure-input"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2m-8 0h9v7h-9z"/></svg> Processed securely · not stored</span><span id="charCount">0 characters</span></div></div>
+          <div class="input-footer"><label class="toggle-row" for="deepScan"><span class="toggle"><input id="deepScan" type="checkbox" checked><span class="toggle-track"></span></span><span><strong>Inspect remote source</strong><small>Fetch public manifests when timestamps are missing</small></span></label><button class="primary-button" id="analyzeButton" type="button"><span class="button-label">Analyze data</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></button></div>
+        </div>
+
+        <aside class="glass-panel side-panel">
+          <div class="side-header"><span class="side-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.4c0 4.7 3.2 8.3 7.5 10.1 4.3-1.8 7.5-5.4 7.5-10.1V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg></span><span class="tiny-label">BUILT FOR DEVELOPERS</span></div>
+          <h3>Read the signal.<br><span>Ignore the noise.</span></h3>
+          <div class="feature-list">
+            <div class="feature-item"><span class="feature-number">01</span><span><b>Smart token parsing</b><small>Recognizes common CDN signing formats</small></span></div>
+            <div class="feature-item"><span class="feature-number">02</span><span><b>Manifest discovery</b><small>Follows public playlist references safely</small></span></div>
+            <div class="feature-item"><span class="feature-number">03</span><span><b>Timezone aware</b><small>India time by default, yours in one tap</small></span></div>
+          </div>
+          <div class="side-note"><span class="note-dot"></span><span>Unknown timestamps are shown as <code>N/A</code> — never guessed.</span></div>
+        </aside>
+      </section>
+
+      <section class="results-section" id="resultsSection" hidden>
+        <div class="results-heading"><div><div class="eyebrow small-eyebrow">02 / ANALYSIS</div><h2>Inspection results</h2></div><div class="results-tools"><span class="result-count" id="resultCount">0 items</span><button class="text-button" id="copyAllButton" type="button">Copy summary</button></div></div>
+        <div id="resultsSummary" class="summary-strip"></div>
+        <div id="resultsList" class="results-list"></div>
+      </section>
+    </main>
+    <footer class="footer"><span>CHRONOGLASS <b>·</b> BUILT FOR THE CURIOUS</span><span>Private by design <i></i> Session <b id="footerSession">06:00:00</b> remaining</span></footer>
+  </div>
+
+  <div class="access-overlay" id="accessOverlay" role="dialog" aria-modal="true" aria-labelledby="accessTitle">
+    <div class="access-backdrop"></div>
+    <div class="access-card glass-panel">
+      <div class="access-brand"><span class="brand-mark large"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3.5 26 8v7.2c0 6.2-4.2 10.9-10 13.3C10.2 26.1 6 21.4 6 15.2V8l10-4.5Z"/><path d="M11.5 16.1 14.6 19l6.2-6.4"/></svg></span><span class="brand-copy"><strong>ChronoGlass</strong><small>PRIVATE DEVELOPER CONSOLE</small></span></div>
+      <div class="access-rule"></div>
+      <div class="eyebrow small-eyebrow">SECURE WORKSPACE</div>
+      <h1 id="accessTitle">Your workspace,<br><span>under lock &amp; key.</span></h1>
+      <p class="access-description">Enter your server passphrase to open the token inspector. One sign-in keeps you connected for up to six hours.</p>
+      <form id="loginForm">
+        <label class="field-label" for="passwordInput">ACCESS PASSPHRASE</label>
+        <div class="password-wrap"><input id="passwordInput" type="password" autocomplete="current-password" placeholder="Enter your passphrase" required><button class="show-password" id="showPassword" type="button" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.6"/></svg></button></div>
+        <button class="primary-button access-submit" id="loginButton" type="submit"><span class="button-label">Unlock workspace</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></button>
+        <p class="form-error" id="loginError" role="alert"></p>
+      </form>
+      <div class="access-foot"><span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2m-8 0h9v7h-9z"/></svg> Signed, HTTP-only session</span><span>06H MAX SESSION</span></div>
+    </div>
+    <div class="access-caption">CHRONOGLASS <i></i> PRIVATE BY DESIGN</div>
+  </div>
+
+  <div class="modal-backdrop" id="settingsModal" hidden>
+    <section class="settings-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal-heading"><div><div class="eyebrow small-eyebrow">PREFERENCES</div><h2 id="settingsTitle">Time display</h2></div><button class="close-button" id="closeSettings" type="button" aria-label="Close settings">×</button></div>
+      <p class="panel-description">Choose the timezone used for every timestamp in your results.</p>
+      <label class="field-label" for="timezoneSelect">DISPLAY TIMEZONE</label>
+      <div class="select-wrap"><select id="timezoneSelect"><option value="Asia/Kolkata">India Standard Time · Asia/Kolkata</option></select><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5"/></svg></div>
+      <button class="text-button device-time-button" id="deviceTimeButton" type="button">Use my device timezone <span id="deviceZoneName"></span></button>
+      <div class="modal-foot"><span>Default timezone</span><button class="text-button" id="resetTimezone" type="button">Reset to India time</button></div>
+    </section>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
