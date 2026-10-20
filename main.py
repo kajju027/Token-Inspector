@@ -33,14 +33,23 @@ MAX_FETCH_BYTES = 160_000
 MAX_FETCH_URLS = 2
 MAX_FETCH_ATTEMPTS = 2
 TIMESTAMP_PATTERN = re.compile(
-    r"(?:^|[?&~|;=\s])(?:Expires|exp|expiry|expires_at|expiresat|expire|exp_time|expiration|e)\s*=\s*['\"]?(\d{10,13})",
+    r"(?:^|[?&~|;=\s\"'])"
+    r"(?:Expires|exp|expiry|expires_at|expiresat|expire|exp_time|expiration|e)"
+    r"\s*=\s*['\"]?(\d{10,13})",
     re.IGNORECASE,
 )
 START_PATTERN = re.compile(
-    r"(?:^|[?&~|;=\s])(?:st|start|start_time|starttime|issued|issued_at|issuedat|iat|created|created_at|createdat|generated|generated_at|generation_time|generationtime|gen_time|gen)\s*=\s*['\"]?(\d{10,13})",
+    r"(?:^|[?&~|;=\s\"'])"
+    r"(?:st|start|start_time|starttime|issued|issued_at|issuedat|iat|created|created_at|createdat|generated|generated_at|generation_time|generationtime|gen_time|gen)"
+    r"\s*=\s*['\"]?(\d{10,13})",
     re.IGNORECASE,
 )
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+URI_TAG_PATTERN = re.compile(r"<(?:BaseURL|URI)\b[^>]*>(.*?)</(?:BaseURL|URI)>", re.IGNORECASE)
+RESOLUTION_PATTERN = re.compile(r"RESOLUTION\s*=\s*(\d+)x(\d+)", re.IGNORECASE)
+BANDWIDTH_PATTERN = re.compile(r"BANDWIDTH\s*=\s*(\d+)", re.IGNORECASE)
+PATH_BANDWIDTH_PATTERN = re.compile(r"/bandwidth/(\d+)", re.IGNORECASE)
+SENSITIVE_PATTERN = re.compile(r"(?i)((?:^|[?&~|;])(?:signature|hmac|sessionid|id|access_token|token|sig)=)([^~&\s\"'<>]+)")
 
 
 def epoch_seconds(value):
@@ -75,7 +84,22 @@ def extract_urls(text):
         if candidate not in seen:
             seen.add(candidate)
             found.append(candidate)
-    return found[:20]
+    return found[:40]
+
+
+def safe_url_label(value):
+    try:
+        parsed = urlsplit(value)
+        if not parsed.scheme or not parsed.hostname:
+            return SENSITIVE_PATTERN.sub(r"\1[REDACTED]", value)
+        path = re.sub(r"(?i)/(?:hdntl|hdnea)=[^/]*", "/[signed-token]", parsed.path)
+        return f"{parsed.hostname}{path}"
+    except ValueError:
+        return SENSITIVE_PATTERN.sub(r"\1[REDACTED]", value)
+
+
+def mask_source_line(value):
+    return SENSITIVE_PATTERN.sub(r"\1[REDACTED]", value)
 
 
 def public_http_url(value):
@@ -111,7 +135,7 @@ def fetch_text(url):
                 timeout=(2, 4),
                 stream=True,
                 allow_redirects=False,
-                headers={"User-Agent": "ChronoGlass/1.0 manifest-inspector", "Accept": "*/*"},
+                headers={"User-Agent": "Mozilla/5.0 ChronoGlass/2.0", "Accept": "application/vnd.apple.mpegurl, application/dash+xml, text/plain, */*"},
             )
             headers_seen = {key.lower(): value for key, value in response.headers.items()}
             if response.is_redirect or response.is_permanent_redirect:
@@ -142,23 +166,84 @@ def fetch_text(url):
             body = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
             break
         except requests.RequestException:
-            error = "Could not reach the remote URL. It may be unavailable or reject server-side requests."
+            error = "Could not reach the remote URL. The provider may block server-side requests."
             break
     return {"url": current, "headers": headers_seen, "body": body, "error": error}
+
+
+def manifest_items(body, base_url):
+    variants = []
+    references = []
+    excerpts = []
+    seen = set()
+    pending_quality = "Manifest"
+    lines = unescape(body).splitlines()
+    candidates = []
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.upper().startswith("#EXT-X-STREAM-INF"):
+            resolution = RESOLUTION_PATTERN.search(stripped)
+            bandwidth = BANDWIDTH_PATTERN.search(stripped)
+            pending_quality = f"{resolution.group(2)}p" if resolution else f"{int(bandwidth.group(1)) // 1000} Kbps" if bandwidth else "Variant"
+            continue
+        if not stripped or stripped.startswith("#") or stripped.startswith("<"):
+            continue
+        if stripped.startswith(("http://", "https://", "/", "./", "../")):
+            excerpt = "\n".join([lines[index - 1].strip(), stripped]) if index and lines[index - 1].strip().startswith("#EXT-X-STREAM-INF") else stripped
+            candidates.append((stripped, pending_quality, excerpt))
+            pending_quality = "Manifest"
+    for match in URI_TAG_PATTERN.finditer(unescape(body)):
+        value = match.group(1).strip()
+        if value:
+            candidates.append((value, "Manifest", value))
+    for url in extract_urls(body):
+        candidates.append((url, "Manifest", url))
+    for candidate, quality, excerpt in candidates:
+        candidate = candidate.strip().strip("\\\"'")
+        if not candidate:
+            continue
+        absolute = urljoin(base_url, candidate) if base_url else candidate
+        if absolute in seen:
+            continue
+        seen.add(absolute)
+        token = timestamp_record(candidate)
+        parsed = urlsplit(absolute)
+        path_lower = parsed.path.lower()
+        is_manifest = path_lower.endswith((".m3u8", ".mpd"))
+        if token["generated"] is not None or token["expires"] is not None:
+            path_bandwidth = PATH_BANDWIDTH_PATTERN.search(parsed.path)
+            display_quality = quality if quality != "Manifest" else f"{int(path_bandwidth.group(1)) // 1000} Kbps" if path_bandwidth else quality
+            variants.append({
+                "quality": display_quality,
+                "url": safe_url_label(absolute),
+                "generated": token["generated"],
+                "expires": token["expires"],
+            })
+            excerpts.append("\n".join(mask_source_line(part) for part in excerpt.splitlines()))
+        elif is_manifest and absolute != base_url:
+            references.append(absolute)
+    return variants, list(dict.fromkeys(references)), excerpts
 
 
 def analyze_text(text, inspect_remote):
     fetch_budget = [MAX_FETCH_URLS]
     cleaned = unescape(text).replace("\\u0026", "&")
     urls = extract_urls(cleaned)
-    sources = urls or [cleaned.strip()]
+    manifest_text = "#EXTM3U" in cleaned.upper() or "<MPD" in cleaned.upper() or "#EXT-X-STREAM-INF" in cleaned.upper()
+    sources = [cleaned.strip()] if manifest_text else urls or [cleaned.strip()]
     results = []
     for source in sources:
         direct = timestamp_record(source)
         inspected = []
         remote_error = None
+        variants = []
+        excerpts = []
         discovered = []
-        if inspect_remote and source.startswith(("http://", "https://")) and (direct["expires"] is None or direct["generated"] is None):
+        if manifest_text and source == cleaned.strip():
+            local_variants, _, local_excerpts = manifest_items(cleaned, None)
+            variants.extend(local_variants)
+            excerpts.extend(local_excerpts)
+        if inspect_remote and source.startswith(("http://", "https://")):
             queue = [source]
             visited = set()
             while queue and len(visited) < MAX_FETCH_URLS and fetch_budget[0] > 0:
@@ -173,40 +258,40 @@ def analyze_text(text, inspect_remote):
                 if fetched["error"] and not body:
                     remote_error = fetched["error"]
                     continue
-                inspected.append({"url": fetched["url"], "status": "Fetched", "bytes": len(body.encode("utf-8"))})
-                combined = "\n".join([fetched["url"], body])
-                discovered.append(combined)
-                if headers.get("last-modified"):
-                    inspected[-1]["lastModified"] = headers["last-modified"]
-                if headers.get("content-type"):
-                    inspected[-1]["contentType"] = headers["content-type"]
-                for line in body.splitlines():
-                    candidate = line.strip()
-                    if not candidate or candidate.startswith("#"):
-                        continue
-                    if TIMESTAMP_PATTERN.search(candidate) or START_PATTERN.search(candidate):
-                        absolute = urljoin(fetched["url"], candidate)
-                        if absolute not in visited and absolute not in queue:
-                            queue.append(absolute)
-                for candidate in extract_urls(body):
-                    if TIMESTAMP_PATTERN.search(candidate) or START_PATTERN.search(candidate):
-                        if candidate not in visited and candidate not in queue:
-                            queue.append(candidate)
+                inspected.append({
+                    "url": safe_url_label(fetched["url"]),
+                    "status": "Fetched",
+                    "bytes": len(body.encode("utf-8")),
+                    "contentType": headers.get("content-type", "unknown"),
+                })
+                variants_found, references, source_lines = manifest_items(body, fetched["url"])
+                variants.extend(variants_found)
+                excerpts.extend(source_lines)
+                discovered.append("\n".join(source_lines))
+                for reference in references:
+                    if reference not in visited and reference not in queue:
+                        queue.append(reference)
             if queue and (len(visited) >= MAX_FETCH_URLS or fetch_budget[0] == 0):
-                remote_error = remote_error or "Remote inspection stopped at the two-URL safety limit."
-        combined_sources = "\n".join([source, *discovered])
-        timestamps = timestamp_record(combined_sources)
-        result = {
+                remote_error = remote_error or "Inspection reached its two-manifest safety limit."
+        direct_values = timestamp_record(source)
+        found_expiries = [item["expires"] for item in variants if item["expires"] is not None]
+        found_starts = [item["generated"] for item in variants if item["generated"] is not None]
+        expires = direct_values["expires"] or (min(found_expiries) if found_expiries else None)
+        generated = direct_values["generated"] or (min(found_starts) if found_starts else None)
+        if not variants and inspected:
+            remote_error = remote_error or "The source was fetched, but no signed manifest variants were found."
+        results.append({
             "input": source,
-            "generated": timestamps["generated"],
-            "expires": timestamps["expires"],
+            "displayInput": "Pasted HLS/DASH Manifest Source" if manifest_text and source == cleaned.strip() else safe_url_label(source),
+            "generated": generated,
+            "expires": expires,
             "inspected": inspected,
+            "variants": variants[:24],
             "remoteError": remote_error,
-        }
-        result["raw"] = "\n\n".join(discovered)[:8000]
-        results.append(result)
+            "raw": "\n\n".join(dict.fromkeys(excerpts))[:6000],
+        })
     if not results:
-        results = [{"input": cleaned.strip(), "generated": None, "expires": None, "inspected": [], "remoteError": None, "raw": ""}]
+        results = [{"input": cleaned.strip(), "displayInput": cleaned.strip(), "generated": None, "expires": None, "inspected": [], "variants": [], "remoteError": None, "raw": ""}]
     return results
 
 
