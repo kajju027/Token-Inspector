@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#05070a">
+  <meta name="theme-color" content="#06090d">
   <meta name="description" content="Inspect stream links, signed tokens and HLS/DASH manifests: token lifetime, URL anatomy and every signed variant in one report.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="preload" href="/static/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css?v=4">
+  <link rel="stylesheet" href="/static/styles.css?v=5">
   <title>Token Inspector — link &amp; manifest intelligence</title>
 </head>
 <body>
@@ -29,14 +29,18 @@
 
       <nav class="segmented" aria-label="Sections">
         <a class="seg is-active" href="#inspector">Inspector</a>
-        <a class="seg" href="#scanPanel">How it scans</a>
-        <a class="seg" href="#resultsSection">Report</a>
+        <button class="seg" id="guideButton" type="button">Guide</button>
+        <button class="seg" id="accessButton" type="button">Access</button>
       </nav>
 
       <div class="bar-actions">
         <span class="session-pill" id="sessionPill"><i></i><span id="sessionLabel">LOCKED</span></span>
-        <button class="icon-btn" id="themeButton" type="button" title="Toggle light and dark theme" aria-label="Toggle theme">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <button class="theme-toggle" id="themeButton" type="button" aria-label="Switch theme" title="Switch theme">
+          <span class="theme-toggle-icon" aria-hidden="true">
+            <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+            <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg>
+          </span>
+          <span class="theme-toggle-label" id="themeLabel">DARK</span>
         </button>
         <button class="icon-btn" id="settingsButton" type="button" title="Display settings" aria-label="Display settings">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 2.6 14H2.4a2 2 0 1 1 0-4h.2A1.7 1.7 0 0 0 4 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 2.6h.1a2 2 0 1 1 4 0v.2A1.7 1.7 0 0 0 15 4a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 19.4 9v.1a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.2 1.9Z"/></svg>
@@ -50,18 +54,13 @@
     <main class="page">
       <section class="hero">
         <div class="hero-copy">
-          <span class="eyebrow"><span class="pulse"></span> Deep manifest scan · v3.0</span>
-          <h1>See what a stream link<br><span>is really hiding.</span></h1>
-          <p class="lede">
-            Paste any stream or manifest URL. Token Inspector reads the link itself, then walks the
-            manifest tree to find every signed variant, token lifetime and timestamp — even when the
-            link in front of you carries none.
-          </p>
-          <ul class="hero-points">
-            <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.4 3.2 3.2L13 4.8"/></svg> Token times inside the manifest</li>
-            <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.4 3.2 3.2L13 4.8"/></svg> Full URL anatomy</li>
-            <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.4 3.2 3.2L13 4.8"/></svg> JWT &amp; CDN token decode</li>
-          </ul>
+          <span class="eyebrow"><span class="pulse"></span> Manifest forensics · v3.1</span>
+          <h1>See what a link<br><span>is really hiding.</span></h1>
+          <p class="lede">Token lifetime, URL anatomy and every signed variant — in one clean report.</p>
+          <div class="hero-links">
+            <button class="link-btn" id="heroGuide" type="button">How to use →</button>
+            <button class="link-btn" id="heroAccess" type="button">Access &amp; license →</button>
+          </div>
         </div>
 
         <aside class="clock-card" aria-label="Current display time">
@@ -84,7 +83,7 @@
             <h2>Paste a link, cookie or manifest</h2>
           </div>
           <div class="composer-tools">
-            <button class="ghost-btn" id="exampleButton" type="button">Load example</button>
+            <button class="ghost-btn" id="exampleButton" type="button">Example</button>
             <button class="ghost-btn" id="pasteButton" type="button">Paste</button>
             <button class="ghost-btn" id="clearButton" type="button">Clear</button>
           </div>
@@ -96,13 +95,13 @@
             <span class="editor-count" id="charCount">0 characters</span>
           </div>
           <label class="sr-only" for="inputData">URL, cookie string or manifest source</label>
-          <textarea id="inputData" spellcheck="false" autocomplete="off" placeholder="https://cdn.example.com/show/…/index.m3u8&#10;&#10;Or paste a whole manifest, a cookie string, or a page's source."></textarea>
+          <textarea id="inputData" spellcheck="false" autocomplete="off" placeholder="https://cdn.example.com/show/…/index.m3u8"></textarea>
           <div class="editor-foot">
             <span class="secure-note">
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5.2a3.5 3.5 0 0 1 7 0V7"/><rect x="3" y="7" width="10" height="7" rx="1.6"/></svg>
-              Nothing is stored · signatures hidden in reports
+              Nothing stored · signatures hidden
             </span>
-            <span class="editor-hint">⌘ / Ctrl + Enter to inspect</span>
+            <span class="editor-hint">⌘ / Ctrl + Enter</span>
           </div>
         </div>
 
@@ -111,44 +110,15 @@
             <input id="deepScan" type="checkbox" checked>
             <span class="switch" aria-hidden="true"></span>
             <span class="switch-text">
-              <strong>Fetch and scan the manifest tree</strong>
-              <small>Follows variant playlists to catch tokens that never appear in your link.</small>
+              <strong>Scan the manifest tree</strong>
+              <small>Follows variant playlists.</small>
             </span>
           </label>
           <button class="primary-btn" id="analyzeButton" type="button">
             <span class="button-label">Inspect source</span>
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 10h12m-4.6-4.6L15.5 10l-4.6 4.6"/></svg>
+            <svg class="button-glyph" viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 10h12m-4.6-4.6L15.5 10l-4.6 4.6"/></svg>
           </button>
         </div>
-      </section>
-
-      <section class="scan-panel" id="scanPanel">
-        <div class="scan-head">
-          <span class="micro">How it scans</span>
-          <h2>Four passes, one readable report</h2>
-        </div>
-        <ol class="scan-steps">
-          <li>
-            <span class="step-num">01</span>
-            <strong>Link anatomy</strong>
-            <p>Splits the URL into host, path segments and decoded query fields, then flags timestamps, hashes and signatures.</p>
-          </li>
-          <li>
-            <span class="step-num">02</span>
-            <strong>Manifest body</strong>
-            <p>Reads the playlist source itself, so <code>hdnts=exp=…</code>, <code>st=…</code> and encrypted key URIs are found even when the URL has no token.</p>
-          </li>
-          <li>
-            <span class="step-num">03</span>
-            <strong>Variant walk</strong>
-            <p>Follows up to three levels of variant playlists and lists every resolution, bitrate and signed segment link.</p>
-          </li>
-          <li>
-            <span class="step-num">04</span>
-            <strong>Token decode</strong>
-            <p>Decodes JWT payloads, AWS presign fields and lifetime values into a start time, an expiry time and a live countdown.</p>
-          </li>
-        </ol>
       </section>
 
       <section class="results" id="resultsSection" hidden>
@@ -159,8 +129,8 @@
           </div>
           <div class="results-tools">
             <span class="count-pill" id="resultCount">0 sources</span>
-            <button class="ghost-btn" id="copyAllButton" type="button">Copy report</button>
-            <button class="ghost-btn" id="downloadButton" type="button">Download JSON</button>
+            <button class="ghost-btn" id="copyAllButton" type="button"><span class="button-label">Copy report</span></button>
+            <button class="ghost-btn" id="downloadButton" type="button"><span class="button-label">Download JSON</span></button>
           </div>
         </div>
         <div class="stat-grid" id="summaryRow"></div>
@@ -176,8 +146,12 @@
     </main>
 
     <footer class="app-footer">
-      <span>Token Inspector · private developer tool</span>
-      <span class="footer-meta">Session <b id="footerSession">30:00</b> · times shown in <b id="footerZone">Asia/Kolkata</b></span>
+      <span>Token Inspector <span class="dot-sep">·</span> MIT License</span>
+      <span class="footer-links">
+        <button class="link-btn" id="footerGuide" type="button">Guide</button>
+        <button class="link-btn" id="footerAccess" type="button">Access</button>
+      </span>
+      <span class="footer-meta">Session <b id="footerSession">30:00</b> · <b id="footerZone">Asia/Kolkata</b></span>
     </footer>
   </div>
 
@@ -198,7 +172,7 @@
         <div class="field">
           <label class="sr-only" for="passwordInput">Passkey</label>
           <div class="field-input">
-            <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Enter passkey" required>
+            <input id="passwordInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Enter passkey" required>
             <button class="reveal-btn" id="revealButton" type="button" aria-label="Show passphrase">SHOW</button>
           </div>
         </div>
@@ -210,7 +184,161 @@
         <li>No data stored</li>
         <li>Signatures redacted</li>
       </ul>
+      <div class="lock-links">
+        <button class="link-btn" id="lockGuide" type="button">How to use</button>
+        <span class="dot-sep">·</span>
+        <button class="link-btn" id="lockAccess" type="button">Access &amp; passkey</button>
+      </div>
     </div>
+  </div>
+
+  <div class="modal" id="guideModal" hidden>
+    <section class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+      <header class="modal-head">
+        <div>
+          <span class="micro">Playbook</span>
+          <h2 id="guideTitle">How to use the console</h2>
+        </div>
+        <button class="icon-btn" id="closeGuide" type="button" aria-label="Close guide">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+
+      <ol class="guide-steps">
+        <li>
+          <span class="guide-num">01</span>
+          <h3>Paste</h3>
+          <p>Drop a player link, an <code>index.m3u8</code> URL, a cookie string or a full manifest. The example button loads a wrapper link you can try.</p>
+        </li>
+        <li>
+          <span class="guide-num">02</span>
+          <h3>Inspect</h3>
+          <p>Keep <em>Scan the manifest tree</em> on to follow variant playlists. Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> instead of the button if you prefer.</p>
+        </li>
+        <li>
+          <span class="guide-num">03</span>
+          <h3>Read</h3>
+          <p>Every source gets a card: host, token fields, start and expiry time, live countdown, signed variants and the requests the scanner made.</p>
+        </li>
+      </ol>
+
+      <div class="guide-grid">
+        <article class="guide-block">
+          <span class="micro">Pass one</span>
+          <h4>Link anatomy</h4>
+          <p>Host, path segments and decoded query fields, with timestamps, hashes and signatures flagged.</p>
+        </article>
+        <article class="guide-block">
+          <span class="micro">Pass two</span>
+          <h4>Manifest body</h4>
+          <p>Reads the playlist itself, so <code>hdnts=exp=…</code>, <code>st=…</code> and key URIs show up even without a token in the link.</p>
+        </article>
+        <article class="guide-block">
+          <span class="micro">Pass three</span>
+          <h4>Variant walk</h4>
+          <p>Follows up to three levels and lists each resolution, bitrate and signed segment link.</p>
+        </article>
+        <article class="guide-block">
+          <span class="micro">Pass four</span>
+          <h4>Token decode</h4>
+          <p>JWT payloads, AWS presign fields and lifetime values become a start, an expiry and a countdown.</p>
+        </article>
+      </div>
+
+      <div class="legend">
+        <span class="legend-item is-green"><i></i> Active</span>
+        <span class="legend-item is-amber"><i></i> Expiring within 24 h</span>
+        <span class="legend-item is-rose"><i></i> Expired</span>
+        <span class="legend-item"><i></i> No token found</span>
+      </div>
+
+      <section class="disclaimer">
+        <span class="micro">Disclaimer</span>
+        <h4>Use it on sources you are allowed to inspect</h4>
+        <p>
+          Token Inspector is a read-only diagnostic tool. It fetches manifests you provide, never stores them,
+          and redacts signatures and credentials in every report. It does not bypass DRM, membership or paywalls,
+          and it is not a downloader. You are responsible for the links you submit.
+        </p>
+        <p>
+          Availability is best-effort: CDNs may rate-limit, geo-block or reject scanner requests, and a failed
+          fetch is reported as a failed request rather than a guess.
+        </p>
+      </section>
+    </section>
+  </div>
+
+  <div class="modal" id="accessModal" hidden>
+    <section class="modal-card wide" role="dialog" aria-modal="true" aria-labelledby="accessModalTitle">
+      <header class="modal-head">
+        <div>
+          <span class="micro">Access &amp; license</span>
+          <h2 id="accessModalTitle">Project details</h2>
+        </div>
+        <button class="icon-btn" id="closeAccess" type="button" aria-label="Close access details">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </header>
+
+      <div class="access-list">
+        <div class="access-row">
+          <span class="access-label">Live console</span>
+          <div class="access-value">
+            <a class="access-link" href="https://token-inspector.onrender.com" target="_blank" rel="noopener noreferrer">token-inspector.onrender.com</a>
+            <button class="copy-btn" id="copyAccessUrl" type="button" data-copy="https://token-inspector.onrender.com">copy</button>
+          </div>
+        </div>
+        <div class="access-row">
+          <span class="access-label">Shared passkey</span>
+          <div class="access-value">
+            <code class="access-key" id="accessKey" data-value="9800" data-hidden="true">••••</code>
+            <button class="copy-btn" id="revealAccessKey" type="button">reveal</button>
+            <button class="copy-btn" id="copyAccessKey" type="button">copy</button>
+          </div>
+        </div>
+        <div class="access-row">
+          <span class="access-label">Session</span>
+          <div class="access-value"><span class="access-static">30 minutes, sliding</span></div>
+        </div>
+      </div>
+
+      <section class="license">
+        <div class="license-head">
+          <span class="micro">License</span>
+          <span class="license-pill">MIT</span>
+        </div>
+        <p class="license-line">Token Inspector is released under the MIT License · © 2026 ChronoGlass Contributors.</p>
+        <details class="license-details">
+          <summary>Read the full MIT license</summary>
+          <pre>MIT License
+
+Copyright (c) 2026 ChronoGlass Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</pre>
+        </details>
+      </section>
+
+      <p class="access-note">
+        The passkey is shared so anyone with this page can open the console. It unlocks a session only —
+        nothing you paste is saved on the server.
+      </p>
+    </section>
   </div>
 
   <div class="modal" id="settingsModal" hidden>
@@ -244,6 +372,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/static/app.js?v=4" defer></script>
+  <script src="/static/app.js?v=5" defer></script>
 </body>
 </html>
