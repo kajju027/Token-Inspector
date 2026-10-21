@@ -138,6 +138,67 @@ function copyButton(value, label) {
   return button;
 }
 
+/* --------------------------------------------------------------- busy states */
+const CHECK_GLYPH =
+  '<svg class="check-glyph" viewBox="0 0 20 20" aria-hidden="true"><path d="m4.4 10.6 3.7 3.6 7.5-7.6"/></svg>';
+const DOTS_GLYPH =
+  '<span class="dot-wave" aria-hidden="true"><span></span><span></span><span></span></span>';
+
+function labelTarget(button) {
+  return button.querySelector('.button-label') || button;
+}
+function beginBusy(button, text) {
+  if (!button || button.dataset.busy === '1') return false;
+  const target = labelTarget(button);
+  button.dataset.idle = target.innerHTML;
+  button.dataset.busy = '1';
+  button.dataset.busyAt = String(Date.now());
+  button.disabled = true;
+  button.classList.remove('success');
+  button.classList.add('is-loading');
+  target.innerHTML = `${text || 'WORKING'}${DOTS_GLYPH}`;
+  return true;
+}
+function finishBusy(button, text, hold) {
+  if (!button || button.dataset.busy !== '1') return Promise.resolve();
+  const elapsed = Date.now() - Number(button.dataset.busyAt || 0);
+  const minimum = 420 - elapsed;
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      button.classList.remove('is-loading');
+      button.classList.add('success');
+      labelTarget(button).innerHTML = `${CHECK_GLYPH}${text || 'DONE'}`;
+      delete button.dataset.busyAt;
+      setTimeout(() => resetBusy(button), hold || 900);
+      resolve();
+    }, Math.max(0, minimum));
+  });
+}
+function resetBusy(button) {
+  if (!button || button.dataset.busy !== '1') return;
+  labelTarget(button).innerHTML = button.dataset.idle || '';
+  button.classList.remove('success', 'is-loading');
+  button.disabled = false;
+  delete button.dataset.busy;
+  delete button.dataset.idle;
+}
+
+/* ------------------------------------------------------------------ modals */
+function openModal(id) {
+  const node = $(id);
+  if (!node) return;
+  node.hidden = false;
+  const focusable = node.querySelector('button, [href], input, select, summary');
+  if (focusable) setTimeout(() => focusable.focus({ preventScroll: true }), 60);
+}
+function closeModal(id) {
+  const node = $(id);
+  if (node) node.hidden = true;
+}
+function closeModals() {
+  ['guideModal', 'accessModal', 'settingsModal'].forEach(closeModal);
+}
+
 /* ------------------------------------------------------------------- theme */
 function applyTheme(choice) {
   STATE.theme = ['dark', 'light', 'system'].includes(choice) ? choice : 'dark';
@@ -150,7 +211,14 @@ function applyTheme(choice) {
   document.documentElement.dataset.theme = resolved;
   localStorage.setItem(KEY_THEME, STATE.theme);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', resolved === 'light' ? '#eff2f5' : '#05070a');
+  if (meta) meta.setAttribute('content', resolved === 'light' ? '#eef1f5' : '#070a0e');
+  const label = $('themeLabel');
+  if (label) label.textContent = resolved === 'light' ? 'LIGHT' : 'DARK';
+  const toggle = $('themeButton');
+  if (toggle) {
+    toggle.setAttribute('aria-label', `Switch to ${resolved === 'light' ? 'dark' : 'light'} theme`);
+    toggle.title = `Switch to ${resolved === 'light' ? 'dark' : 'light'} theme`;
+  }
   document.querySelectorAll('[data-theme-choice]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.themeChoice === STATE.theme);
   });
@@ -223,15 +291,22 @@ async function syncSession() {
   }
 }
 async function refreshSession() {
+  const bootAt = Date.now();
   setLocked(true, 'boot');
+  const holdBoot = async () => {
+    const left = 520 - (Date.now() - bootAt);
+    if (left > 0) await new Promise((resolve) => setTimeout(resolve, left));
+  };
   try {
     const response = await fetch('/api/session', { cache: 'no-store' });
     const data = await response.json();
     if (data.authenticated) {
+      await holdBoot();
       setLocked(false);
       startSessionTimer(data.remaining);
       return;
     }
+    await holdBoot();
     setLocked(true, 'auth');
     if (!data.configured) {
       $('loginError').textContent =
@@ -803,10 +878,9 @@ async function inspect() {
     return;
   }
   const button = $('analyzeButton');
-  const label = button.querySelector('.button-label');
-  button.disabled = true;
-  button.classList.add('is-loading');
-  label.textContent = 'Inspecting';
+  const composer = document.querySelector('.composer');
+  beginBusy(button, 'SCANNING');
+  composer.classList.add('is-scanning');
   try {
     const response = await fetch('/api/analyze', {
       method: 'POST',
@@ -830,13 +904,13 @@ async function inspect() {
       chip.classList.toggle('is-active', chip.dataset.filter === 'all'));
     renderReport();
     $('resultsSection').hidden = false;
+    await finishBusy(button, 'READY', 700);
+    composer.classList.remove('is-scanning');
     $('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
+    resetBusy(button);
+    composer.classList.remove('is-scanning');
     toast(error.message || 'Could not inspect this source');
-  } finally {
-    button.disabled = false;
-    button.classList.remove('is-loading');
-    label.textContent = 'Inspect source';
   }
 }
 
@@ -900,10 +974,9 @@ function wire() {
     event.preventDefault();
     const button = $('loginButton');
     const error = $('loginError');
-    const label = button.querySelector('.button-label');
+    if (button.disabled) return;
     error.textContent = '';
-    button.disabled = true;
-    label.textContent = 'Checking';
+    beginBusy(button, 'AUTHENTICATING');
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
@@ -912,19 +985,18 @@ function wire() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Access denied.');
+      await finishBusy(button, 'ACCESS GRANTED', 700);
+      await new Promise((resolve) => setTimeout(resolve, 320));
       $('passwordInput').value = '';
-      button.classList.add('success');
-      setTimeout(() => button.classList.remove('success'), 650);
       setLocked(false);
       startSessionTimer(data.remaining);
-      toast('Console unlocked for 30 minutes');
+      toast('Console unlocked · 30 min session');
+      resetBusy(button);
     } catch (exception) {
-      error.textContent = exception.message || 'Unable to unlock the console.';
+      resetBusy(button);
+      error.textContent = `✖ ${exception.message || 'Unable to unlock the console.'}`;
       $('authCard').classList.add('shake');
       setTimeout(() => $('authCard').classList.remove('shake'), 450);
-    } finally {
-      button.disabled = false;
-      label.textContent = 'UNLOCK CONSOLE';
     }
   });
 
@@ -955,19 +1027,27 @@ function wire() {
     $('inputData').focus();
   });
   $('pasteButton').addEventListener('click', async () => {
+    const button = $('pasteButton');
+    beginBusy(button, 'READING');
     try {
-      $('inputData').value = await navigator.clipboard.readText();
+      const clip = await navigator.clipboard.readText();
+      $('inputData').value = clip;
       $('inputData').dispatchEvent(new Event('input'));
       $('inputData').focus();
+      finishBusy(button, 'PASTED', 800);
     } catch {
+      resetBusy(button);
       toast('Clipboard access was not granted');
     }
   });
   $('exampleButton').addEventListener('click', () => {
+    const button = $('exampleButton');
+    beginBusy(button, 'LOADING');
     $('inputData').value = EXAMPLE_URL;
     $('inputData').dispatchEvent(new Event('input'));
     $('inputData').focus();
-    toast('Example wrapper link loaded — press Inspect source');
+    finishBusy(button, 'LOADED', 900);
+    toast('Example loaded — press Inspect source');
   });
 
   $('themeButton').addEventListener('click', toggleTheme);
@@ -1005,17 +1085,34 @@ function wire() {
     renderList();
   });
 
-  $('copyAllButton').addEventListener('click', () => {
+  $('copyAllButton').addEventListener('click', async () => {
+    const button = $('copyAllButton');
     if (!STATE.results.length) {
       toast('Run an inspection first');
       return;
     }
-    copyText(reportText(), 'Report copied');
+    if (!beginBusy(button, 'COPYING')) return;
+    await copyText(reportText(), 'Report copied');
+    finishBusy(button, 'COPIED', 900);
   });
-  $('downloadButton').addEventListener('click', downloadJson);
+  $('downloadButton').addEventListener('click', () => {
+    const button = $('downloadButton');
+    if (!STATE.results.length) {
+      toast('Run an inspection first');
+      return;
+    }
+    if (!beginBusy(button, 'BUILDING')) return;
+    setTimeout(() => {
+      downloadJson();
+      finishBusy(button, 'SAVED', 900);
+    }, 180);
+  });
 
   $('logoutButton').addEventListener('click', async () => {
+    const button = $('logoutButton');
+    button.classList.add('is-loading');
     await fetch('/api/logout', { method: 'POST' }).catch(() => {});
+    button.classList.remove('is-loading');
     clearInterval(STATE.sessionTimer);
     $('sessionPill').classList.remove('is-live');
     $('passwordInput').value = '';
@@ -1038,9 +1135,46 @@ function wire() {
     STATE.installPrompt = event;
   });
 
+  /* guide + access modals */
+  const openGuide = () => openModal('guideModal');
+  const openAccess = () => openModal('accessModal');
+  $('guideButton').addEventListener('click', openGuide);
+  $('heroGuide').addEventListener('click', openGuide);
+  $('footerGuide').addEventListener('click', openGuide);
+  $('lockGuide').addEventListener('click', openGuide);
+  $('closeGuide').addEventListener('click', () => closeModal('guideModal'));
+  $('accessButton').addEventListener('click', openAccess);
+  $('heroAccess').addEventListener('click', openAccess);
+  $('footerAccess').addEventListener('click', openAccess);
+  $('lockAccess').addEventListener('click', openAccess);
+  $('closeAccess').addEventListener('click', () => closeModal('accessModal'));
+
+  ['guideModal', 'accessModal', 'settingsModal'].forEach((id) => {
+    $(id).addEventListener('click', (event) => {
+      if (event.target === $(id)) closeModal(id);
+    });
+  });
+
+  $('copyAccessUrl').addEventListener('click', () =>
+    copyText('https://token-inspector.onrender.com', 'Console link copied'));
+  $('revealAccessKey').addEventListener('click', () => {
+    const key = $('accessKey');
+    const hidden = key.dataset.hidden === 'true';
+    key.dataset.hidden = String(!hidden);
+    key.textContent = hidden ? key.dataset.value : '••••';
+    $('revealAccessKey').textContent = hidden ? 'hide' : 'reveal';
+  });
+  $('copyAccessKey').addEventListener('click', () => {
+    const key = $('accessKey');
+    copyText(key.dataset.value, 'Passkey copied');
+    key.dataset.hidden = 'false';
+    key.textContent = key.dataset.value;
+    $('revealAccessKey').textContent = 'hide';
+  });
+
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    $('settingsModal').hidden = true;
+    closeModals();
   });
 
   const media = window.matchMedia('(prefers-color-scheme: light)');
@@ -1050,9 +1184,9 @@ function wire() {
   if (media.addEventListener) media.addEventListener('change', onScheme);
   else if (media.addListener) media.addListener(onScheme);
 
-  document.querySelectorAll('.seg').forEach((link) => {
+  document.querySelectorAll('a.seg[href]').forEach((link) => {
     link.addEventListener('click', () => {
-      document.querySelectorAll('.seg').forEach((item) => item.classList.remove('is-active'));
+      document.querySelectorAll('a.seg[href]').forEach((item) => item.classList.remove('is-active'));
       link.classList.add('is-active');
     });
   });
